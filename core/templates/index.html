@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guesty AI - Property Assistant</title>
+    <link rel="icon" type="image/svg+xml" href="https://base44.com/logo_v2.svg" />
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        background: 'hsl(var(--background))',
+                        foreground: 'hsl(var(--foreground))',
+                        card: {
+                            DEFAULT: 'hsl(var(--card))',
+                            foreground: 'hsl(var(--card-foreground))'
+                        },
+                        popover: {
+                            DEFAULT: 'hsl(var(--popover))',
+                            foreground: 'hsl(var(--popover-foreground))'
+                        },
+                        primary: {
+                            DEFAULT: 'hsl(var(--primary))',
+                            foreground: 'hsl(var(--primary-foreground))'
+                        },
+                        secondary: {
+                            DEFAULT: 'hsl(var(--secondary))',
+                            foreground: 'hsl(var(--secondary-foreground))'
+                        },
+                        muted: {
+                            DEFAULT: 'hsl(var(--muted))',
+                            foreground: 'hsl(var(--muted-foreground))'
+                        },
+                        accent: {
+                            DEFAULT: 'hsl(var(--accent))',
+                            foreground: 'hsl(var(--accent-foreground))'
+                        },
+                        destructive: {
+                            DEFAULT: 'hsl(var(--destructive))',
+                            foreground: 'hsl(var(--destructive-foreground))'
+                        },
+                        border: 'hsl(var(--border))',
+                        input: 'hsl(var(--input))',
+                        ring: 'hsl(var(--ring))',
+                        sidebar: {
+                            DEFAULT: 'hsl(var(--sidebar-background))',
+                            foreground: 'hsl(var(--sidebar-foreground))',
+                            primary: 'hsl(var(--sidebar-primary))',
+                            'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+                            accent: 'hsl(var(--sidebar-accent))',
+                            'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+                            border: 'hsl(var(--sidebar-border))',
+                            ring: 'hsl(var(--sidebar-ring))'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body class="bg-slate-50 h-screen overflow-hidden">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div id="sidebar" class="bg-slate-900 border-r border-slate-700 flex flex-col transition-all duration-300" style="width: 280px;">
+            <!-- Header -->
+            <div class="p-4 border-b border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-lg flex items-center justify-center">
+                            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="font-semibold text-white">Guesty AI</h2>
+                            <p class="text-xs text-slate-400">Property Assistant</p>
+                        </div>
+                    </div>
+                    <button id="sidebar-toggle" class="text-slate-300 hover:bg-slate-700 hover:text-white p-2 rounded-lg transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <button id="new-chat-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2 px-4 py-2 rounded-lg flex items-center justify-center transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    <span class="sidebar-text">New Chat</span>
+                </button>
+            </div>
+
+            <!-- Chat Sessions -->
+            <div class="flex-1 overflow-y-auto p-2 scroll-area">
+                <div id="sessions-list" class="space-y-1">
+                    <!-- Sessions will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 border-t border-slate-700">
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-14 9V3z"></path>
+                    </svg>
+                    <span class="sidebar-text">Powered by Guesty AI</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <!-- Messages Area -->
+            <div id="message-scroll-area" class="flex-1 overflow-y-auto scroll-area">
+                <div class="max-w-4xl mx-auto pt-8">
+                    <!-- Welcome Screen -->
+                    <div id="welcome-screen" class="flex flex-col items-center justify-center h-full min-h-[calc(100vh-200px)] text-center px-4">
+                        <div class="w-16 h-16 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center mb-6">
+                            <span class="text-2xl font-bold text-white">G</span>
+                        </div>
+                        
+                        <h2 class="text-3xl font-bold text-slate-800 mb-3">
+                            Hey, welcome to Guesty AI!
+                        </h2>
+                        <p class="text-lg text-slate-600 mb-6 max-w-md">
+                            How can I help you with your property management today?
+                        </p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
+                            <button class="suggestion-btn text-left p-3 bg-white border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 text-sm text-slate-700 transition-colors">
+                                How do I handle guest complaints effectively?
+                            </button>
+                            <button class="suggestion-btn text-left p-3 bg-white border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 text-sm text-slate-700 transition-colors">
+                                What's the best pricing strategy for my property?
+                            </button>
+                            <button class="suggestion-btn text-left p-3 bg-white border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 text-sm text-slate-700 transition-colors">
+                                Help me automate check-in processes
+                            </button>
+                            <button class="suggestion-btn text-left p-3 bg-white border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50 text-sm text-slate-700 transition-colors">
+                                How to improve my property's occupancy rate?
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Messages Container -->
+                    <div id="messages-container">
+                        <!-- Messages will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Message Input -->
+            <div class="border-t border-slate-200 bg-white p-4">
+                <form id="message-form" class="max-w-4xl mx-auto">
+                    <div class="flex items-end gap-3">
+                        <div class="flex-1">
+                            <textarea 
+                                id="message-input" 
+                                placeholder="Ask about property management, reservations, guest communication..."
+                                class="w-full min-h-[52px] max-h-32 resize-none py-3 px-4 border border-slate-300 rounded-lg focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                                rows="1"
+                            ></textarea>
+                        </div>
+                        
+                        <button 
+                            type="submit" 
+                            id="send-btn"
+                            class="bg-emerald-600 hover:bg-emerald-700 text-white h-[52px] px-6 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/chat.js' %}"></script>
+
+    <style>
+        .sidebar.collapsed {
+            width: 64px !important;
+        }
+        
+        .sidebar.collapsed .sidebar-text {
+            display: none;
+        }
+        
+        .sidebar.collapsed #new-chat-btn {
+            padding: 12px;
+            justify-content: center;
+        }
+        
+        .sidebar.collapsed #new-chat-btn svg {
+            margin: 0;
+        }
+
+        /* Custom CSS variables */
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 0 0% 3.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 0 0% 3.9%;
+            --popover: 0 0% 100%;
+            --popover-foreground: 0 0% 3.9%;
+            --primary: 0 0% 9%;
+            --primary-foreground: 0 0% 98%;
+            --secondary: 0 0% 96.1%;
+            --secondary-foreground: 0 0% 9%;
+            --muted: 0 0% 96.1%;
+            --muted-foreground: 0 0% 45.1%;
+            --accent: 0 0% 96.1%;
+            --accent-foreground: 0 0% 9%;
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 0 0% 98%;
+            --border: 0 0% 89.8%;
+            --input: 0 0% 89.8%;
+            --ring: 0 0% 3.9%;
+            --sidebar-background: 0 0% 98%;
+            --sidebar-foreground: 240 5.3% 26.1%;
+            --sidebar-primary: 240 5.9% 10%;
+            --sidebar-primary-foreground: 0 0% 98%;
+            --sidebar-accent: 240 4.8% 95.9%;
+            --sidebar-accent-foreground: 240 5.9% 10%;
+            --sidebar-border: 220 13% 91%;
+            --sidebar-ring: 217.2 91.2% 59.8%;
+        }
+
+        /* Loading animation */
+        @keyframes loading-dots {
+            0%, 20% {
+                opacity: 0.5;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.2);
+            }
+            80%, 100% {
+                opacity: 0.5;
+                transform: scale(1);
+            }
+        }
+
+        .loading-dot {
+            animation: loading-dots 1s infinite;
+        }
+
+        .loading-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .loading-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        /* Scrollbar styling */
+        .scroll-area::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scroll-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .scroll-area::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 3px;
+        }
+
+        .scroll-area::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+        }
+
+        /* Message bubble animations */
+        .message-bubble {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: messageSlideIn 0.3s ease-out forwards;
+        }
+
+        @keyframes messageSlideIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</body>
+</html>
