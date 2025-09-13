@@ -301,7 +301,7 @@ IMPORTANT: Return ONLY the SQL query, nothing else."""
         
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4.1-mini",
                 messages=messages,
                 temperature=0
             )
