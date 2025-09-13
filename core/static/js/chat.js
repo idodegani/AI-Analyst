@@ -80,6 +80,14 @@ class GuestyChat {
             const savedSessions = localStorage.getItem('guesty-chat-sessions');
             this.sessions = savedSessions ? JSON.parse(savedSessions) : [];
             
+            // Migrate old sessions without guesty_session_id (optional - they can remain with null values)
+            this.sessions.forEach(session => {
+                if (!session.guesty_session_id) {
+                    // Old sessions keep their original structure, guesty_session_id remains undefined/null
+                    console.log(`Legacy session found: ${session.id} - no Guesty session ID assigned`);
+                }
+            });
+            
             this.renderSessions();
             
             if (this.sessions.length > 0 && !this.currentSession) {
@@ -90,11 +98,42 @@ class GuestyChat {
         }
     }
 
+    generateGuestySessionId() {
+        // Generate 16 random alphanumeric characters
+        const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+        let result = '';
+        for (let i = 0; i < 16; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return `guesty-${result}`;
+    }
+
+    isSessionIdUnique(sessionId) {
+        return !this.sessions.some(session => session.guesty_session_id === sessionId);
+    }
+
+    generateUniqueGuestySessionId() {
+        let sessionId = this.generateGuestySessionId();
+        let attempts = 0;
+        
+        // Ensure uniqueness, add timestamp if needed
+        while (!this.isSessionIdUnique(sessionId) && attempts < 10) {
+            const timestamp = Date.now().toString().slice(-4);
+            sessionId = `guesty-${this.generateGuestySessionId().split('-')[1].slice(0, 12)}${timestamp}`;
+            attempts++;
+        }
+        
+        return sessionId;
+    }
+
     async createNewSession() {
-        const sessionId = `gs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const internalId = `gs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const guestySessionId = this.generateUniqueGuestySessionId();
+        
         const newSession = {
-            id: sessionId,
-            session_id: sessionId,
+            id: internalId,
+            session_id: internalId, // Keep for backward compatibility
+            guesty_session_id: guestySessionId,
             title: "New Chat",
             message_count: 0,
             last_message: "",
@@ -232,25 +271,77 @@ class GuestyChat {
                     : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`;
             
+            // Handle old sessions without guesty_session_id
+            const displaySessionId = session.guesty_session_id || null;
+            const fallbackTitle = session.guesty_session_id 
+                ? `Chat ${session.guesty_session_id.slice(-4)}` 
+                : `Chat ${session.session_id.slice(-4)}`;
+            
             sessionElement.innerHTML = `
-                <div class="flex items-start gap-3 w-full">
+                <div class="flex items-start gap-3 w-full group">
                     <svg class="w-4 h-4 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
                     </svg>
                     <div class="flex-1 min-w-0">
-                        <p class="text-sm font-medium truncate">
-                            ${session.title || `Chat ${session.session_id.slice(-4)}`}
-                        </p>
-                        <p class="text-xs text-slate-400 truncate mt-1">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="text-sm font-medium truncate">
+                                ${session.title || fallbackTitle}
+                            </p>
+                            <div class="flex items-center gap-1">
+                                ${displaySessionId ? `
+                                    <span class="text-xs px-2 py-1 bg-emerald-600 text-white rounded-full font-mono text-[10px] flex-shrink-0 sidebar-text">
+                                        ${displaySessionId.slice(-8)}
+                                    </span>
+                                ` : `
+                                    <button class="assign-session-id-btn text-xs px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded-full text-[10px] flex-shrink-0 sidebar-text opacity-0 group-hover:opacity-100 transition-opacity" data-session-id="${session.id}">
+                                        Assign ID
+                                    </button>
+                                `}
+                                <button class="delete-session-btn text-slate-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1" data-session-id="${session.id}">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        ${displaySessionId && !this.sidebarCollapsed ? `
+                            <p class="text-xs text-slate-500 font-mono mb-1 sidebar-text truncate">
+                                ${displaySessionId}
+                            </p>
+                        ` : ''}
+                        <p class="text-xs text-slate-400 truncate sidebar-text">
                             ${session.last_message || "No messages yet"}
                         </p>
                     </div>
                 </div>
             `;
             
-            sessionElement.addEventListener('click', () => {
+            sessionElement.addEventListener('click', (e) => {
+                // Don't select session if clicking on action buttons
+                if (e.target.closest('.delete-session-btn') || e.target.closest('.assign-session-id-btn')) {
+                    return;
+                }
                 this.selectSession(session);
             });
+
+            // Add event listeners for action buttons
+            const deleteBtn = sessionElement.querySelector('.delete-session-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (confirm('Are you sure you want to delete this chat session?')) {
+                        this.deleteSession(session.id);
+                    }
+                });
+            }
+
+            const assignBtn = sessionElement.querySelector('.assign-session-id-btn');
+            if (assignBtn) {
+                assignBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.assignGuestySessionId(session);
+                });
+            }
             
             sessionsList.appendChild(sessionElement);
         });
@@ -359,6 +450,43 @@ class GuestyChat {
                 scrollArea.scrollTop = scrollArea.scrollHeight;
             }
         }, 100);
+    }
+
+    assignGuestySessionId(session) {
+        if (!session.guesty_session_id) {
+            session.guesty_session_id = this.generateUniqueGuestySessionId();
+            this.saveSessions();
+            this.renderSessions();
+        }
+        return session.guesty_session_id;
+    }
+
+    deleteSession(sessionId) {
+        const sessionIndex = this.sessions.findIndex(s => s.id === sessionId);
+        if (sessionIndex !== -1) {
+            const session = this.sessions[sessionIndex];
+            
+            // Remove session messages from localStorage
+            localStorage.removeItem(`guesty-chat-messages-${session.session_id}`);
+            
+            // Remove session from array
+            this.sessions.splice(sessionIndex, 1);
+            
+            // If this was the current session, select another one or show welcome screen
+            if (this.currentSession && this.currentSession.id === sessionId) {
+                if (this.sessions.length > 0) {
+                    this.selectSession(this.sessions[0]);
+                } else {
+                    this.currentSession = null;
+                    this.messages = [];
+                    this.renderMessages();
+                    document.getElementById('welcome-screen').style.display = 'flex';
+                }
+            }
+            
+            this.saveSessions();
+            this.renderSessions();
+        }
     }
 
     saveSessions() {
