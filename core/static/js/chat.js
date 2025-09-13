@@ -76,22 +76,18 @@ class GuestyChat {
 
     async loadSessions() {
         try {
-            // For now, we'll use localStorage to simulate sessions
-            const savedSessions = localStorage.getItem('guesty-chat-sessions');
-            this.sessions = savedSessions ? JSON.parse(savedSessions) : [];
+            const response = await fetch('/api/sessions/');
+            const data = await response.json();
             
-            // Migrate old sessions without guesty_session_id (optional - they can remain with null values)
-            this.sessions.forEach(session => {
-                if (!session.guesty_session_id) {
-                    // Old sessions keep their original structure, guesty_session_id remains undefined/null
-                    console.log(`Legacy session found: ${session.id} - no Guesty session ID assigned`);
+            if (response.ok) {
+                this.sessions = data.sessions;
+                this.renderSessions();
+                
+                if (this.sessions.length > 0 && !this.currentSession) {
+                    this.selectSession(this.sessions[0]);
                 }
-            });
-            
-            this.renderSessions();
-            
-            if (this.sessions.length > 0 && !this.currentSession) {
-                this.selectSession(this.sessions[0]);
+            } else {
+                console.error('Error loading sessions:', data.error);
             }
         } catch (error) {
             console.error('Error loading sessions:', error);
@@ -132,7 +128,7 @@ class GuestyChat {
         
         const newSession = {
             id: internalId,
-            session_id: internalId, // Keep for backward compatibility
+            session_id: internalId,
             guesty_session_id: guestySessionId,
             title: "New Chat",
             message_count: 0,
@@ -140,25 +136,50 @@ class GuestyChat {
             created_date: new Date().toISOString()
         };
 
-        this.sessions.unshift(newSession);
-        this.saveSessions();
-        this.renderSessions();
-        this.selectSession(newSession);
+        try {
+            const response = await fetch('/api/sessions/create/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(newSession)
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.sessions.unshift(data);
+                this.renderSessions();
+                this.selectSession(data);
+            } else {
+                console.error('Error creating session:', data.error);
+            }
+        } catch (error) {
+            console.error('Error creating session:', error);
+        }
     }
 
     selectSession(session) {
         this.currentSession = session;
-        this.loadMessages(session.session_id);
+        this.loadMessages(session.id);
         this.renderSessions();
         this.hideWelcomeScreen();
     }
 
     async loadMessages(sessionId) {
         try {
-            const savedMessages = localStorage.getItem(`guesty-chat-messages-${sessionId}`);
-            this.messages = savedMessages ? JSON.parse(savedMessages) : [];
-            this.renderMessages();
-            this.scrollToBottom();
+            const response = await fetch(`/api/sessions/${sessionId}/messages/`);
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.messages = data.messages;
+                this.renderMessages();
+                this.scrollToBottom();
+            } else {
+                console.error('Error loading messages:', data.error);
+                this.messages = [];
+                this.renderMessages();
+            }
         } catch (error) {
             console.error('Error loading messages:', error);
             this.messages = [];
@@ -189,10 +210,10 @@ class GuestyChat {
         }
 
         try {
-            // Add user message
+            // Add user message to UI immediately
             const userMessage = {
                 id: Date.now(),
-                session_id: this.currentSession.session_id,
+                session_id: this.currentSession.id,
                 content: content,
                 role: "user",
                 timestamp: new Date().toISOString()
@@ -207,56 +228,51 @@ class GuestyChat {
             this.isLoading = true;
             this.showLoading();
 
-            // Simulate AI response (replace with actual API call later)
-            const aiResponse = await this.generateAIResponse(content);
-            
-            const aiMessage = {
-                id: Date.now() + 1,
-                session_id: this.currentSession.session_id,
-                content: aiResponse,
-                role: "assistant",
-                timestamp: new Date().toISOString()
-            };
+            // Send message to API
+            const response = await fetch('/api/messages/send/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: this.currentSession.id,
+                    content: content
+                })
+            });
 
-            this.messages.push(aiMessage);
-            this.hideLoading();
-            this.renderMessages();
-            this.scrollToBottom();
-
-            // Update session
-            this.currentSession.last_message = content.substring(0, 100);
-            this.currentSession.message_count = this.messages.filter(m => m.session_id === this.currentSession.session_id).length;
+            const data = await response.json();
             
-            if (this.currentSession.message_count === 2) { // First exchange
-                this.currentSession.title = content.substring(0, 50);
+            if (response.ok) {
+                // Update user message with server response
+                const userMsgIndex = this.messages.findIndex(m => m.id === userMessage.id);
+                if (userMsgIndex !== -1) {
+                    this.messages[userMsgIndex] = data.user_message;
+                }
+                
+                // Add AI message
+                this.messages.push(data.ai_message);
+                this.hideLoading();
+                this.renderMessages();
+                this.scrollToBottom();
+
+                // Reload sessions to get updated metadata
+                await this.loadSessions();
+            } else {
+                console.error('Error sending message:', data.error);
+                this.hideLoading();
+                // Remove the optimistic user message
+                this.messages = this.messages.filter(m => m.id !== userMessage.id);
+                this.renderMessages();
+                alert('Error sending message. Please try again.');
             }
-
-            this.saveSessions();
-            this.saveMessages();
-            this.renderSessions();
 
         } catch (error) {
             console.error('Error sending message:', error);
             this.hideLoading();
+            alert('Error sending message. Please try again.');
         } finally {
             this.isLoading = false;
         }
-    }
-
-    async generateAIResponse(userMessage) {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-
-        // Simple responses for demonstration (replace with actual API call)
-        const responses = [
-            "Thank you for your question about property management. As your Guesty AI assistant, I'm here to help you optimize your short-term rental operations. Could you provide more specific details about your property or the challenge you're facing?",
-            "Great question! For property management best practices, I recommend focusing on guest communication, automated check-in processes, and regular property maintenance schedules. What specific aspect would you like me to elaborate on?",
-            "I understand you're looking for guidance on revenue optimization. Key strategies include dynamic pricing, seasonal adjustments, and analyzing competitor rates in your area. Would you like me to dive deeper into any of these areas?",
-            "That's an excellent point about guest experience. Providing clear instructions, quick response times, and anticipating guest needs are crucial for positive reviews and repeat bookings. How can I help you implement these strategies?",
-            "For cleaning and maintenance coordination, I suggest creating detailed checklists, establishing reliable vendor relationships, and implementing quality control processes. What's your current setup, and where do you see room for improvement?"
-        ];
-
-        return responses[Math.floor(Math.random() * responses.length)];
     }
 
     renderSessions() {
@@ -452,51 +468,71 @@ class GuestyChat {
         }, 100);
     }
 
-    assignGuestySessionId(session) {
+    async assignGuestySessionId(session) {
         if (!session.guesty_session_id) {
-            session.guesty_session_id = this.generateUniqueGuestySessionId();
-            this.saveSessions();
-            this.renderSessions();
-        }
-        return session.guesty_session_id;
-    }
+            const newGuestyId = this.generateUniqueGuestySessionId();
+            
+            try {
+                const response = await fetch(`/api/sessions/${session.id}/`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        guesty_session_id: newGuestyId
+                    })
+                });
 
-    deleteSession(sessionId) {
-        const sessionIndex = this.sessions.findIndex(s => s.id === sessionId);
-        if (sessionIndex !== -1) {
-            const session = this.sessions[sessionIndex];
-            
-            // Remove session messages from localStorage
-            localStorage.removeItem(`guesty-chat-messages-${session.session_id}`);
-            
-            // Remove session from array
-            this.sessions.splice(sessionIndex, 1);
-            
-            // If this was the current session, select another one or show welcome screen
-            if (this.currentSession && this.currentSession.id === sessionId) {
-                if (this.sessions.length > 0) {
-                    this.selectSession(this.sessions[0]);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Update local session
+                    const sessionIndex = this.sessions.findIndex(s => s.id === session.id);
+                    if (sessionIndex !== -1) {
+                        this.sessions[sessionIndex] = data;
+                    }
+                    this.renderSessions();
                 } else {
-                    this.currentSession = null;
-                    this.messages = [];
-                    this.renderMessages();
-                    document.getElementById('welcome-screen').style.display = 'flex';
+                    console.error('Error assigning session ID:', data.error);
                 }
+            } catch (error) {
+                console.error('Error assigning session ID:', error);
             }
-            
-            this.saveSessions();
-            this.renderSessions();
         }
     }
 
-    saveSessions() {
-        localStorage.setItem('guesty-chat-sessions', JSON.stringify(this.sessions));
-    }
-
-    saveMessages() {
-        if (this.currentSession) {
-            const sessionMessages = this.messages.filter(m => m.session_id === this.currentSession.session_id);
-            localStorage.setItem(`guesty-chat-messages-${this.currentSession.session_id}`, JSON.stringify(sessionMessages));
+    async deleteSession(sessionId) {
+        try {
+            const response = await fetch(`/api/sessions/${sessionId}/delete/`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                // Remove session from local array
+                const sessionIndex = this.sessions.findIndex(s => s.id === sessionId);
+                if (sessionIndex !== -1) {
+                    this.sessions.splice(sessionIndex, 1);
+                }
+                
+                // If this was the current session, select another one or show welcome screen
+                if (this.currentSession && this.currentSession.id === sessionId) {
+                    if (this.sessions.length > 0) {
+                        this.selectSession(this.sessions[0]);
+                    } else {
+                        this.currentSession = null;
+                        this.messages = [];
+                        this.renderMessages();
+                        document.getElementById('welcome-screen').style.display = 'flex';
+                    }
+                }
+                
+                this.renderSessions();
+            } else {
+                const data = await response.json();
+                console.error('Error deleting session:', data.error);
+            }
+        } catch (error) {
+            console.error('Error deleting session:', error);
         }
     }
 }
