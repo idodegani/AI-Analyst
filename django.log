@@ -1,0 +1,17 @@
+INFO 2025-09-12 16:27:45,586 session_manager 31416 24004 Started session cleanup thread
+INFO 2025-09-12 16:30:12,471 autoreload 24372 16908 Watching for file changes with StatReloader
+INFO 2025-09-12 16:34:14,739 autoreload 20196 15052 Watching for file changes with StatReloader
+INFO 2025-09-12 16:36:59,591 autoreload 20196 15052 C:\Users\wings\Desktop\GSTY_Home_assignment\core\ai_agent\retriever.py changed, reloading.
+INFO 2025-09-12 16:37:01,039 autoreload 21308 19160 Watching for file changes with StatReloader
+INFO 2025-09-12 16:37:05,032 session_manager 21308 19160 Started session cleanup thread
+INFO 2025-09-12 16:37:13,325 autoreload 21308 19160 C:\Users\wings\Desktop\GSTY_Home_assignment\core\ai_agent\retriever.py changed, reloading.
+INFO 2025-09-12 16:37:14,495 autoreload 13332 31752 Watching for file changes with StatReloader
+INFO 2025-09-12 16:37:18,539 session_manager 13332 31752 Started session cleanup thread
+INFO 2025-09-12 16:37:32,214 autoreload 13332 31752 C:\Users\wings\Desktop\GSTY_Home_assignment\core\ai_agent\retriever.py changed, reloading.
+INFO 2025-09-12 16:37:33,695 autoreload 23924 18520 Watching for file changes with StatReloader
+INFO 2025-09-12 16:37:38,238 session_manager 23924 18520 Started session cleanup thread
+INFO 2025-09-12 16:40:18,078 autoreload 29728 32728 Watching for file changes with StatReloader
+INFO 2025-09-12 16:40:22,202 session_manager 31324 32964 Started session cleanup thread
+INFO 2025-09-12 16:40:41,118 autoreload 29728 32728 C:\Users\wings\Desktop\GSTY_Home_assignment\core\ai_agent\retriever.py changed, reloading.
+INFO 2025-09-12 16:40:41,932 autoreload 29320 16540 Watching for file changes with StatReloader
+INFO 2025-09-12 16:43:00,486 autoreload 29320 16540 C:\Users\wings\Desktop\GSTY_Home_assignment\GSTY_Home_assignment\settings.py changed, reloading.
