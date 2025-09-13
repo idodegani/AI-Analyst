@@ -243,6 +243,9 @@ class GuestyChat {
             const data = await response.json();
             
             if (response.ok) {
+                // Debug: Log the received data
+                console.log('Received AI message:', data.ai_message);
+                
                 // Update user message with server response
                 const userMsgIndex = this.messages.findIndex(m => m.id === userMessage.id);
                 if (userMsgIndex !== -1) {
@@ -375,6 +378,13 @@ class GuestyChat {
 
     createMessageElement(message, isLast) {
         const isUser = message.role === 'user';
+        
+        // Debug: Log message data
+        if (!isUser) {
+            console.log('Creating AI message element:', message);
+            console.log('Has SQL query:', !!message.sql_query);
+        }
+        
         const messageDiv = document.createElement('div');
         messageDiv.className = `message-bubble flex gap-4 p-4 ${isUser ? 'justify-end' : 'justify-start'}`;
         
