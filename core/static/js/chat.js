@@ -14,6 +14,8 @@ class GuestyChat {
         this.bindEvents();
         this.loadSessions();
         this.scrollToBottom();
+        // Show welcome screen by default
+        this.showWelcomeScreen();
     }
 
     bindEvents() {
@@ -49,8 +51,11 @@ class GuestyChat {
         // Suggestion buttons
         document.querySelectorAll('.suggestion-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                const suggestion = btn.textContent.trim();
-                this.sendMessage(suggestion);
+                const suggestion = btn.querySelector('span').textContent.trim();
+                const input = document.getElementById('message-input');
+                input.value = suggestion;
+                this.autoResizeTextarea(input);
+                input.focus();
             });
         });
     }
@@ -83,9 +88,8 @@ class GuestyChat {
                 this.sessions = data.sessions;
                 this.renderSessions();
                 
-                if (this.sessions.length > 0 && !this.currentSession) {
-                    this.selectSession(this.sessions[0]);
-                }
+                // Don't auto-select a session on initial load
+                // Let the user see the welcome screen first
             } else {
                 console.error('Error loading sessions:', data.error);
             }
@@ -151,6 +155,9 @@ class GuestyChat {
                 this.sessions.unshift(data);
                 this.renderSessions();
                 this.selectSession(data);
+                // Show welcome screen for new session
+                this.messages = [];
+                this.showWelcomeScreen();
             } else {
                 console.error('Error creating session:', data.error);
             }
@@ -210,6 +217,9 @@ class GuestyChat {
         }
 
         try {
+            // Hide welcome screen immediately when sending first message
+            this.hideWelcomeScreen();
+            
             // Add user message to UI immediately
             const userMessage = {
                 id: Date.now(),
@@ -222,7 +232,6 @@ class GuestyChat {
             this.messages.push(userMessage);
             this.renderMessages();
             this.scrollToBottom();
-            this.hideWelcomeScreen();
 
             // Show loading
             this.isLoading = true;
@@ -502,6 +511,15 @@ class GuestyChat {
         }
     }
 
+    showWelcomeScreen() {
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const messagesContainer = document.getElementById('messages-container');
+        if (welcomeScreen && messagesContainer) {
+            welcomeScreen.style.display = 'flex';
+            messagesContainer.innerHTML = '';
+        }
+    }
+
     scrollToBottom() {
         setTimeout(() => {
             const scrollArea = document.getElementById('message-scroll-area');
@@ -565,7 +583,7 @@ class GuestyChat {
                         this.currentSession = null;
                         this.messages = [];
                         this.renderMessages();
-                        document.getElementById('welcome-screen').style.display = 'flex';
+                        this.showWelcomeScreen();
                     }
                 }
                 
