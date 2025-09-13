@@ -10,8 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -129,3 +129,6 @@ STATICFILES_DIRS = [
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# OpenAI API Key
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "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")

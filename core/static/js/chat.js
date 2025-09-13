@@ -379,6 +379,7 @@ class GuestyChat {
         messageDiv.className = `message-bubble flex gap-4 p-4 ${isUser ? 'justify-end' : 'justify-start'}`;
         
         const timestamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+        const messageId = message.id || `msg-${Date.now()}`;
         
         messageDiv.innerHTML = `
             ${!isUser ? `
@@ -396,9 +397,21 @@ class GuestyChat {
                         : 'bg-slate-100 text-slate-900 border border-slate-200'
                 }">
                     <p class="mb-0 ${isUser ? 'text-white' : 'text-slate-900'}">${this.formatMessage(message.content)}</p>
+                    ${!isUser && message.sql_query ? `
+                        <button class="sql-toggle-btn mt-2 flex items-center gap-1 text-xs ${message.query_status === 'error' ? 'text-red-600' : 'text-emerald-600'} hover:opacity-80 transition-opacity" data-message-id="${messageId}">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                            </svg>
+                            <span>View SQL Query</span>
+                        </button>
+                        <div id="sql-${messageId}" class="sql-query-container hidden mt-3 p-3 bg-slate-900 rounded-lg overflow-x-auto">
+                            <pre class="text-xs text-slate-100 whitespace-pre-wrap font-mono">${this.escapeHtml(message.sql_query)}</pre>
+                        </div>
+                    ` : ''}
                 </div>
                 <div class="text-xs text-slate-400 mt-1 ${isUser ? 'text-right' : 'text-left'}">
                     ${timestamp}
+                    ${!isUser && message.query_status === 'error' ? '<span class="text-red-500 ml-2">⚠️ Query Error</span>' : ''}
                 </div>
             </div>
             
@@ -411,6 +424,20 @@ class GuestyChat {
             ` : ''}
         `;
         
+        // Add event listener for SQL toggle button
+        const sqlToggleBtn = messageDiv.querySelector('.sql-toggle-btn');
+        if (sqlToggleBtn) {
+            sqlToggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const sqlContainer = messageDiv.querySelector(`#sql-${messageId}`);
+                if (sqlContainer) {
+                    sqlContainer.classList.toggle('hidden');
+                    const btnText = sqlToggleBtn.querySelector('span');
+                    btnText.textContent = sqlContainer.classList.contains('hidden') ? 'View SQL Query' : 'Hide SQL Query';
+                }
+            });
+        }
+        
         return messageDiv;
     }
 
@@ -420,6 +447,12 @@ class GuestyChat {
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
             .replace(/\n/g, '<br>');
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     showLoading() {

@@ -295,6 +295,38 @@
                 transform: translateY(0);
             }
         }
+
+        /* SQL Query styling */
+        .sql-query-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .sql-query-container::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        .sql-query-container::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        .sql-query-container::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+
+        .sql-query-container::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        .sql-toggle-btn {
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-weight: 500;
+        }
     </style>
 </body>
 </html>

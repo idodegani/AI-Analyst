@@ -32,6 +32,8 @@ class ChatMessage(models.Model):
     content = models.TextField()
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
     timestamp = models.DateTimeField(default=timezone.now)
+    sql_query = models.TextField(blank=True, null=True)  # Store SQL query for assistant messages
+    query_status = models.CharField(max_length=20, blank=True, null=True)  # success, error, retry
     
     class Meta:
         ordering = ['timestamp']

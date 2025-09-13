@@ -1,51 +1,21 @@
 import os
 import json
+import asyncio
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from .models import ChatSession, ChatMessage
-from llama_index.core import Settings
-from llama_index.llms.openai import OpenAI
-from llama_cloud_services import LlamaCloudIndex
-from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.core.llms import ChatMessage as LlamaChatMessage
+from .ai_analyst import get_analyst, QueryStatus
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Configuration - these should be in environment variables
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "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")
-LLAMA_CLOUD_API_KEY = os.environ.get("LLAMA_CLOUD_API_KEY", "llx-hgbCEzLC1FOiv2hs7ldeHVzdtfOLPmIx9RQyBOzW4Mer611L")
-LLAMA_CLOUD_INDEX_NAME = os.environ.get("LLAMA_CLOUD_INDEX_NAME", "GSTY_INDEX")
-LLAMA_CLOUD_PROJECT_NAME = os.environ.get("LLAMA_CLOUD_PROJECT_NAME", "Default")
-LLAMA_CLOUD_ORGANIZATION_ID = os.environ.get("LLAMA_CLOUD_ORGANIZATION_ID", "acd2b482-30f4-461d-a101-0190a08b0a87")
 
 # Set OpenAI API key
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-
-# Initialize Settings
-Settings.llm = OpenAI(model="gpt-4o", temperature=0.1)
-
-# Global variable to store the index connection
-_llama_index = None
-
-def get_llama_index():
-    """Get or create the LlamaCloud index connection"""
-    global _llama_index
-    if _llama_index is None:
-        try:
-            _llama_index = LlamaCloudIndex(
-                name=LLAMA_CLOUD_INDEX_NAME,
-                project_name=LLAMA_CLOUD_PROJECT_NAME,
-                organization_id=LLAMA_CLOUD_ORGANIZATION_ID,
-                api_key=LLAMA_CLOUD_API_KEY,
-            )
-            logger.info("Successfully connected to LlamaCloud index.")
-        except Exception as e:
-            logger.error(f"Failed to connect to LlamaCloud index: {e}")
-            raise
-    return _llama_index
 
 
 @csrf_exempt
@@ -127,13 +97,19 @@ def get_messages(request, session_id):
         
         messages_data = []
         for message in messages:
-            messages_data.append({
+            msg_data = {
                 'id': str(message.id),  # Convert UUID to string for frontend
                 'session_id': session_id,
                 'content': message.content,
                 'role': message.role,
                 'timestamp': message.timestamp.isoformat()
-            })
+            }
+            # Include SQL query for assistant messages
+            if message.role == 'assistant' and message.sql_query:
+                msg_data['sql_query'] = message.sql_query
+                msg_data['query_status'] = message.query_status
+            
+            messages_data.append(msg_data)
         
         return JsonResponse({'messages': messages_data})
     except ChatSession.DoesNotExist:
@@ -146,7 +122,7 @@ def get_messages(request, session_id):
 @csrf_exempt
 @require_http_methods(["POST"])
 def send_message(request):
-    """Send a message and get AI response"""
+    """Send a message and get AI response using AI Analyst"""
     try:
         data = json.loads(request.body)
         session_id = data.get('session_id')
@@ -168,51 +144,24 @@ def send_message(request):
             role='user'
         )
         
-        # Get all previous messages for context
-        previous_messages = session.messages.all().order_by('timestamp')
+        # Get AI analyst instance
+        analyst = get_analyst()
         
-        # Convert to LlamaIndex ChatMessage format
-        chat_history = []
-        for msg in previous_messages:
-            if msg.id != user_message.id:  # Don't include the current message
-                chat_history.append(
-                    LlamaChatMessage(
-                        role=msg.role,
-                        content=msg.content
-                    )
-                )
+        # Process the question using AI analyst
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            response = loop.run_until_complete(analyst.ask(content, session_id))
+        finally:
+            loop.close()
         
-        # Create memory buffer with chat history
-        memory = ChatMemoryBuffer.from_defaults(
-            chat_history=chat_history,
-            token_limit=3900
-        )
-        
-        # Get LlamaCloud index
-        index = get_llama_index()
-        
-        # Create chat engine with memory
-        chat_engine = index.as_chat_engine(
-            chat_mode="context",
-            memory=memory,
-            system_prompt=(
-                "You are an expert property management assistant for Guesty. "
-                "You help property managers with questions about guest communication, "
-                "pricing strategies, automation, occupancy optimization, and general "
-                "property management best practices. Answer questions based on the "
-                "provided context and conversation history."
-            ),
-        )
-        
-        # Get AI response
-        response = chat_engine.chat(content)
-        ai_response_text = str(response)
-        
-        # Save AI response
+        # Save AI response with SQL query
         ai_message = ChatMessage.objects.create(
             session=session,
-            content=ai_response_text,
-            role='assistant'
+            content=response.text_answer,
+            role='assistant',
+            sql_query=response.sql_query,
+            query_status=response.status.value
         )
         
         # Update session metadata
@@ -222,7 +171,7 @@ def send_message(request):
             session.title = content[:50]
         session.save()
         
-        # Return both messages
+        # Return both messages with SQL query
         return JsonResponse({
             'user_message': {
                 'id': str(user_message.id),  # Convert UUID to string
@@ -236,7 +185,9 @@ def send_message(request):
                 'session_id': session_id,
                 'content': ai_message.content,
                 'role': ai_message.role,
-                'timestamp': ai_message.timestamp.isoformat()
+                'timestamp': ai_message.timestamp.isoformat(),
+                'sql_query': ai_message.sql_query,
+                'query_status': ai_message.query_status
             }
         })
         
