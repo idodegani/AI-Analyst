@@ -166,6 +166,46 @@ class GuestyChat {
         }
     }
 
+    async createNewSessionForMessage() {
+        const internalId = `gs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const guestySessionId = this.generateUniqueGuestySessionId();
+        
+        const newSession = {
+            id: internalId,
+            session_id: internalId,
+            guesty_session_id: guestySessionId,
+            title: "New Chat",
+            message_count: 0,
+            last_message: "",
+            created_date: new Date().toISOString()
+        };
+
+        try {
+            const response = await fetch('/api/sessions/create/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(newSession)
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.sessions.unshift(data);
+                this.renderSessions();
+                // Set current session but don't show welcome screen
+                this.currentSession = data;
+                this.messages = [];
+                // Don't call showWelcomeScreen() here - let sendMessage handle the UI
+            } else {
+                console.error('Error creating session:', data.error);
+            }
+        } catch (error) {
+            console.error('Error creating session:', error);
+        }
+    }
+
     selectSession(session) {
         this.currentSession = session;
         this.loadMessages(session.id);
@@ -203,19 +243,15 @@ class GuestyChat {
         input.value = '';
         this.autoResizeTextarea(input);
 
-        // Create session if none exists
+        // Create session if none exists, but don't show welcome screen
         if (!this.currentSession) {
-            await this.createNewSession();
+            await this.createNewSessionForMessage();
         }
 
         await this.sendMessage(message);
     }
 
     async sendMessage(content) {
-        if (!this.currentSession) {
-            await this.createNewSession();
-        }
-
         try {
             // Hide welcome screen immediately when sending first message
             this.hideWelcomeScreen();
