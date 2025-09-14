@@ -1,3 +1,0 @@
-0. Create requierments.txt
-
-1. ask the chat whawt is the best way to keep the answers in the backend 
