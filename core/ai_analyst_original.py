@@ -51,10 +51,40 @@ class SQLQuery(BaseModel):
         v = re.sub(r'```$', '', v)
         v = v.strip()
         
-        # Check if it's actually SQL
-        sql_keywords = ['SELECT', 'DESCRIBE', 'SHOW', 'WITH']
-        if not any(keyword in v.upper() for keyword in sql_keywords):
-            raise ValueError("Not a valid SQL query")
+        # 🔒 SECURITY: Block dangerous operations
+        dangerous_keywords = [
+            'DELETE', 'DROP', 'TRUNCATE', 'INSERT', 'UPDATE', 
+            'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC',
+            'EXECUTE', 'MERGE', 'CALL', 'REPLACE', 'RENAME',
+            'BACKUP', 'RESTORE', 'ATTACH', 'DETACH'
+        ]
+        
+        query_upper = v.upper()
+        for keyword in dangerous_keywords:
+            # Check for keyword as a whole word to avoid false positives
+            if re.search(r'\b' + keyword + r'\b', query_upper):
+                raise ValueError(f"Dangerous SQL operation '{keyword}' not allowed. Only read operations are permitted.")
+        
+        # 🔒 SECURITY: Block SQL injection patterns
+        injection_patterns = [
+            r';[^;]*$',  # Multiple statements
+            r'--',       # SQL comments
+            r'/\*',      # Block comments start
+            r'\*/',      # Block comments end
+            r'@@',       # Global variables
+            r'xp_',      # Extended procedures
+            r'sp_',      # Stored procedures
+            r'0x[0-9a-fA-F]+',  # Hex literals that could be used for injection
+        ]
+        
+        for pattern in injection_patterns:
+            if re.search(pattern, v):
+                raise ValueError("Potentially malicious SQL pattern detected")
+        
+        # Only allow safe read operations
+        safe_keywords = ['SELECT', 'DESCRIBE', 'SHOW', 'WITH', 'EXPLAIN', 'PRAGMA']
+        if not any(re.search(r'\b' + keyword + r'\b', query_upper) for keyword in safe_keywords):
+            raise ValueError("Only read operations (SELECT, DESCRIBE, SHOW, WITH) are allowed")
             
         return v
 
@@ -172,6 +202,7 @@ class AIAnalystDjango:
         
         # Add nodes
         workflow.add_node("generate_sql", self.generate_sql)
+        workflow.add_node("validate_security", self.validate_security)
         workflow.add_node("execute_query", self.execute_query)
         workflow.add_node("format_response", self.format_response)
         workflow.add_node("handle_error", self.handle_error)
@@ -179,7 +210,12 @@ class AIAnalystDjango:
         # Add conditional edges
         workflow.add_conditional_edges(
             "generate_sql",
-            lambda x: "execute_query" if x.get("sql_valid", False) else "handle_error"
+            lambda x: "validate_security" if x.get("sql_valid", False) else "handle_error"
+        )
+        
+        workflow.add_conditional_edges(
+            "validate_security",
+            lambda x: "execute_query" if x.get("security_passed", False) else "handle_error"
         )
         
         workflow.add_conditional_edges(
@@ -271,6 +307,13 @@ TABLES:
 - reservations: reservation_id (BIGINT), account_id (BIGINT), listing_id (BIGINT), status (VARCHAR), created_at (TIMESTAMP), check_in (TIMESTAMP), check_out (TIMESTAMP), fee_host_payout_usd (DOUBLE), guest_count (DOUBLE), nights_count (DOUBLE), booking_window (BIGINT)
 - reviews: review_id (VARCHAR), reservation_id (BIGINT), overall_rating (DOUBLE), cleaniness_rating (DOUBLE), location_rating (DOUBLE)
 
+🔒 SECURITY RULES (CRITICAL):
+- ONLY generate SELECT, DESCRIBE, SHOW, WITH, or EXPLAIN queries
+- NEVER generate DELETE, DROP, UPDATE, INSERT, ALTER, CREATE, TRUNCATE, or any data modification queries
+- NEVER include multiple statements separated by semicolons
+- NEVER include SQL comments (-- or /* */)
+- If asked to modify/delete/update data, respond with: SELECT 'I can only read data, not modify it' as error_message
+
 CRITICAL RULES:
 1. ONLY return the SQL query - no explanations, no markdown, no comments
 2. The column is spelled 'cleaniness_rating' (with typo), NOT 'cleanliness_rating'
@@ -282,6 +325,7 @@ CRITICAL RULES:
 EXAMPLES:
 - "average guest count for Q1 2025" → SELECT AVG(guest_count) FROM reservations WHERE EXTRACT(MONTH FROM created_at) IN (1,2,3) AND EXTRACT(YEAR FROM created_at) = 2025
 - "average guest count for H1 2025" → SELECT AVG(guest_count) FROM reservations WHERE EXTRACT(MONTH FROM created_at) IN (1,2,3,4,5,6) AND EXTRACT(YEAR FROM created_at) = 2025
+- "delete all reservations" → SELECT 'I can only read data, not modify it' as error_message
 
 IMPORTANT: Return ONLY the SQL query, nothing else."""
 
@@ -324,6 +368,51 @@ IMPORTANT: Return ONLY the SQL query, nothing else."""
             
         return state
     
+    def validate_security(self, state: dict) -> dict:
+        """Security validation node in LangGraph workflow"""
+        sql_query = state.get("sql_query", "")
+        
+        try:
+            # Additional runtime security check
+            query_upper = sql_query.upper()
+            
+            # Check for dangerous operations that might have slipped through
+            dangerous_operations = [
+                'DELETE', 'DROP', 'TRUNCATE', 'INSERT', 'UPDATE',
+                'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC'
+            ]
+            
+            for op in dangerous_operations:
+                if re.search(r'\b' + op + r'\b', query_upper):
+                    state["error"] = f"Security violation: {op} operations are not allowed"
+                    state["security_passed"] = False
+                    return state
+            
+            # Check for multiple statements
+            if ';' in sql_query and not sql_query.strip().endswith(';'):
+                state["error"] = "Security violation: Multiple SQL statements detected"
+                state["security_passed"] = False
+                return state
+            
+            # Ensure query starts with allowed operation
+            allowed_starts = ['SELECT', 'WITH', 'DESCRIBE', 'SHOW', 'EXPLAIN', 'PRAGMA']
+            query_start = query_upper.strip().split()[0] if query_upper.strip() else ''
+            
+            if not any(query_start.startswith(allowed) for allowed in allowed_starts):
+                state["error"] = f"Security violation: Query must start with {', '.join(allowed_starts)}"
+                state["security_passed"] = False
+                return state
+            
+            # All checks passed
+            state["security_passed"] = True
+            logger.info(f"✅ Security validation passed for query: {sql_query[:50]}...")
+            
+        except Exception as e:
+            state["error"] = f"Security validation error: {str(e)}"
+            state["security_passed"] = False
+            
+        return state
+    
     def _is_follow_up(self, question: str) -> bool:
         """Check if question is a follow-up"""
         follow_up_patterns = [
@@ -346,6 +435,11 @@ IMPORTANT: Return ONLY the SQL query, nothing else."""
         
         try:
             sql_query = state.get("sql_query", "")
+            
+            # 🔒 FINAL SECURITY CHECK before execution
+            query_upper = sql_query.upper().strip()
+            if not any(query_upper.startswith(allowed) for allowed in ['SELECT', 'WITH', 'DESCRIBE', 'SHOW', 'EXPLAIN', 'PRAGMA']):
+                raise ValueError("Security: Only read operations are allowed")
             
             result = self.conn.execute(sql_query).fetchall()
             columns = [desc[0] for desc in self.conn.description]
